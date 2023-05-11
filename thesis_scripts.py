@@ -11,7 +11,6 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-
 from sklearn.preprocessing import StandardScaler,MinMaxScaler
 from gensim.models.doc2vec import Doc2Vec, TaggedDocument
 from nltk.tokenize import word_tokenize
@@ -99,11 +98,12 @@ ratings_df["user_id"] = ratings_df["user_id"].apply(lambda x: x-1)
 ratings_df = ratings_df.reset_index(drop = True)
 
 # Normalizacja ocen w zbiorze ratings_df
+ratings_df["old_rating"] = ratings_df["rating"]
 ratings_df["rating"] = MinMaxScaler(feature_range=(0,1)).fit_transform(ratings_df[["rating"]])
 
 # Podział zbioru ratings_df na uczący i testowy. Podział losowy.
 train, test = train_test_split(ratings_df, test_size=0.2, random_state=1)
-print(len(test.user_id.unique()))
+#print(len(test.user_id.unique()))
 
 # Zmiana numeracji ID filmów w movies_df na movie_id z ratings_df.
 # movies_df zawiera dodatkowe filmy, nieobecne w ratings_df, ich id zostaje zamienione na NaN 
@@ -182,11 +182,115 @@ movies_df["tags"] = movies_df["tags_list"].apply(lambda x: ','.join(x))
 
 
 ##############################################################################################
-### Analiza danych###
+### Analiza danych ###
 ##############################################################################################
 example_user = 0
 
-####xxxxxxx
+print(movies_df[["movie_id", 'title', 'genres', 'tags_list']].head(10))
+
+# Liczba filmów
+print("Liczba filmów w zbiorze movies_df: ", len(ratings_df.movie_id.unique()))
+# Liczba użytkowników
+print("Liczba filmów w zbiorze movies_df: ", len(ratings_df.user_id.unique()))
+
+# Lista gatunków filmowych
+print(all_genres)
+print("(",len(all_genres) ,")")
+
+# Rozkład gatunków w filmach
+fig, ax = plt.subplots(figsize=(15,5))
+sns.barplot(x=genres_type_counts.index, y=genres_type_counts.values, color='steelblue')
+ax.set_xlabel('Gatunki', fontsize = 12)
+ax.set_ylabel('Liczba filmów', fontsize = 12)
+ax.set_title('Liczba filmów posiadających danych gatunek', fontsize = 18)
+plt.xticks(rotation=45, fontsize = 12)
+plt.yticks(fontsize = 12)
+#plt.tight_layout()
+plt.show()
+
+
+# Lista wszystkich możliwych ocen przed i po normalizacji
+print(np.sort(ratings_df.old_rating.unique()))
+print(np.sort(ratings_df.rating.unique()))
+
+# Rozkład ocen
+rating_type_counts = ratings_df.groupby("old_rating").count()["movie_id"]
+
+fig, ax = plt.subplots(figsize=(15,5))
+sns.barplot(x=rating_type_counts.index, y=rating_type_counts.values, color='steelblue')
+ax.set_xlabel('Wysokość oceny', fontsize = 12)
+ax.set_ylabel('Liczba filmów', fontsize = 12)
+ax.set_title('Rozkład wysokości ocen wśród filmów', fontsize = 18)
+plt.xticks(fontsize = 12)
+plt.yticks(fontsize = 12)
+#plt.tight_layout()
+plt.show()
+
+def find_x_at_halfarea(counts):
+    """
+    Znajduje takie x przy którym pole pod wykresem ocen podzielić można na pół.
+
+    Parameters
+    ----------
+    rating_counts : TYPE pd.Series
+        Seria z liczbą ocen dla każdego z użytkowników/filmów.
+
+    Returns
+    -------
+    x_at_halfarea : TYPE int
+
+    """
+    rating_counts_integral_to_x = np.array([np.trapz(counts.values[:i], counts.index.values[:i]) for i in range(len(counts))])
+    half_area = rating_counts_integral_to_x[-1] / 2
+    
+    x_at_halfarea = next(i for i, v in enumerate(rating_counts_integral_to_x) if v >= half_area)
+    return x_at_halfarea
+
+
+    
+# Liczba ocen wystawionych dla każdego z filmów
+movies_ratings_counts = ratings_df.groupby("movie_id").count()["rating"].sort_values(ascending=False).reset_index(drop=True) 
+x_h_movies = find_x_at_halfarea(movies_ratings_counts)
+
+fig, ax = plt.subplots(figsize=(15,5))
+sns.lineplot(x=movies_ratings_counts.index, y=movies_ratings_counts.values, color='steelblue')
+ax.set_xlabel('Liczba filmów', fontsize = 12)
+ax.set_ylabel('Liczba ocen', fontsize = 12)
+ax.set_title('Liczba ocen wystawionych dla każdego z filmów', fontsize = 18)
+ax.fill_between(movies_ratings_counts.index, movies_ratings_counts.values, alpha=0.2)
+plt.axvline(x=x_h_movies, color='red', linewidth=2)
+plt.text(525, -35, str(x_h_movies), fontsize=12)
+plt.yticks(fontsize = 12)
+#plt.tight_layout()
+plt.show()
+
+# Liczba ocen wystawionych przez każdego z użytkowników
+users_ratings_counts = ratings_df.groupby("user_id").count()["rating"].sort_values(ascending=False).reset_index(drop=True)
+x_h_users = find_x_at_halfarea(users_ratings_counts)
+
+fig, ax = plt.subplots(figsize=(15,5))
+sns.lineplot(x=users_ratings_counts.index, y=users_ratings_counts.values, color='steelblue')
+ax.set_xlabel('Liczba użytkowników', fontsize = 12)
+ax.set_ylabel('Liczba ocen', fontsize = 12)
+ax.set_title('Licza ocen wystawionych przez każdego z użytkowników', fontsize = 18)
+ax.fill_between(users_ratings_counts.index, users_ratings_counts.values, alpha=0.2)
+plt.axvline(x=x_h_users, color='red', linewidth=2)
+plt.text(65, -291, str(x_h_users), fontsize=12)
+plt.yticks(fontsize = 12)
+#plt.tight_layout()
+plt.show()
+
+# Utworzenie macierzy rzadkiej ocen użytkowników i filmów
+ratings_sparse_matrix = ratings_df.pivot_table(index='user_id', columns='movie_id', values='rating', fill_value=np.nan)
+
+# Wykres macierzy rzadkiej
+fig, ax = plt.subplots(figsize=(20,5))
+sns.heatmap(ratings_sparse_matrix.isnull(), vmin=0, vmax=1, cbar=False, ax=ax).set_title("Macierz rzadka ocen użytkowników i filmów")
+ax.set_xlabel('Użytkownicy', fontsize = 12)
+ax.set_ylabel('Filmy', fontsize = 12)
+ax.set_title('Macierz rzadka ocen użytkowników i filmów', fontsize = 18)
+plt.show()
+
 
 
 ##############################################################################################
