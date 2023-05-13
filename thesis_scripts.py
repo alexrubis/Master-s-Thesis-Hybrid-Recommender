@@ -102,7 +102,7 @@ ratings_df["old_rating"] = ratings_df["rating"]
 ratings_df["rating"] = MinMaxScaler(feature_range=(0,1)).fit_transform(ratings_df[["rating"]])
 
 # Podział zbioru ratings_df na uczący i testowy. Podział losowy.
-train, test = train_test_split(ratings_df, test_size=0.2, random_state=1)
+train, test = train_test_split(ratings_df, test_size=0.2, stratify=ratings_df['user_id'], random_state=1)
 #print(len(test.user_id.unique()))
 
 # Zmiana numeracji ID filmów w movies_df na movie_id z ratings_df.
@@ -297,7 +297,6 @@ plt.show()
 ### Modele systemów rekomendacyjnych
 ##############################################################################################
 
-
 ## Model losowy
 def random_recommender(users_list, movies_list, k):
     '''
@@ -319,15 +318,17 @@ def random_recommender(users_list, movies_list, k):
     
     return predicted_ratings_list
 
+
+
 ## Model popularnościowy
-def popularity_recommender(users_list, movies_popularity_list, k):
+def popularity_recommender(users_list, movies_popularity_list:pd.Series, k):
     '''
     Tworzy listę list K najpopularniejszych filmów do zarekomendowania użytkownikowi.
 
     Parameters
     ----------
     users_list : lista  id użytkowników 
-    movies_popularity_list: lista  id flimóW z ilością ocen każdego z nich
+    movies_popularity_list: pd.Series  id flimóW z ilością ocen każdego z nich
     k : liczba filmów do zarekomendowania
 
     Returns
@@ -335,10 +336,13 @@ def popularity_recommender(users_list, movies_popularity_list, k):
     predicted_ratings_random_list : lista list K najpopularniejszych rekomendacji dla wszystkich użytkowników
 
     '''
-    top20 = movies_popularity_list.iloc[:k].index.values
-    predicted_ratings_list = [top20 for user in users_list]
+    topk = movies_popularity_list.iloc[:k].index.values
+    predicted_ratings_list = [topk for user in users_list]
     
     return predicted_ratings_list
+
+
+
 
 ## Model Content Based - Doc2Vec
 
@@ -401,9 +405,10 @@ doc2vec_movies_embbedings = doc2vec_model.dv.vectors
 print(doc2vec_movies_embbedings.shape)
 
 
-# Przykładowe top20 filmów podobnych do wybranego filmu
-example_movie = 747
-sims = doc2vec_model.docvecs.most_similar(positive = [example_movie], topn = 20)
+
+# Top20 filmów podobnych do filmu "Schindler's List"
+example_movie = 28
+sims = doc2vec_model.dv.most_similar(positive = [example_movie], topn = 20)
 sims_df = pd.DataFrame(sims,columns=["movie_id", "cosine_similarity"])
 sims_df.movie_id = sims_df.movie_id.astype('float64')
 sims_df['title'] = sims_df['movie_id'].map(movies_df.set_index('movie_id')['title'])
@@ -412,7 +417,28 @@ sims_df['tags_list'] = sims_df['movie_id'].map(movies_df.set_index('movie_id')['
 print("Top 20 filmów podobnych do filmu movie_id =", example_movie, "(",movies_df["title"][movies_df["movie_id"] == example_movie ].values[0], ")")
 print(sims_df)
 
-# Opisanie przykładowego filmu za pomocą chmury słów
+# Opisanie filmu za pomocą chmury słów
+wordcloud_text = ' '.join([','.join(t) for t in sims_df.tags_list])
+plt.rcParams["figure.figsize"] = (15,10)
+# Wygenerowanie WordCloud
+wordcloud = WordCloud(width = 1024, height = 1024, background_color = 'white').generate(wordcloud_text)
+plt.figure(figsize=(10,8),facecolor = 'white', edgecolor='blue')
+plt.imshow(wordcloud, interpolation='bilinear')
+plt.axis("off")
+plt.show()
+
+# Top20 filmów podobnych do filmu "Lord of the Rings: Fellowship of the Ring"
+example_movie = 747
+sims = doc2vec_model.dv.most_similar(positive = [example_movie], topn = 20)
+sims_df = pd.DataFrame(sims,columns=["movie_id", "cosine_similarity"])
+sims_df.movie_id = sims_df.movie_id.astype('float64')
+sims_df['title'] = sims_df['movie_id'].map(movies_df.set_index('movie_id')['title'])
+sims_df['tags_list'] = sims_df['movie_id'].map(movies_df.set_index('movie_id')['tags_list'])
+
+print("Top 20 filmów podobnych do filmu movie_id =", example_movie, "(",movies_df["title"][movies_df["movie_id"] == example_movie ].values[0], ")")
+print(sims_df)
+
+# Opisanie filmu za pomocą chmury słów
 wordcloud_text = ' '.join([','.join(t) for t in sims_df.tags_list])
 plt.rcParams["figure.figsize"] = (15,10)
 # Wygenerowanie WordCloud
@@ -527,7 +553,7 @@ def recommend_items_doc2vec(user_id, k, show_cos_sims=False):
 # Sprawdzenie top 20 filmów najbardziej podobnych do przykładowego użytkownika
     
 # Filmy rekomendowane dla przykładowego użytkownika
-example_user_top20 = recommend_items_doc2vec(example_user, 20)
+example_user_top20 = recommend_items_doc2vec(example_user, 20, True)
 example_user_top20 = pd.DataFrame(example_user_top20,columns=["movie_id", "cosine_similarity"])
 example_user_top20.movie_id = example_user_top20.movie_id.astype('float64')
 example_user_top20['title'] = example_user_top20['movie_id'].map(movies_df.set_index('movie_id')['title'])
@@ -547,20 +573,70 @@ print("Top 20 filmów zarekomendowanych dla użytkownika", example_user)
 print(example_user_top20)
 
 
+## Model Content Based - Neural Collaborative Filtering
+
+
+
+
+##############################################################################################
+### Ewaluacja modeli ###
+##############################################################################################
+
+k = 20
+
+# Tabela wyników ewaluacji
+evaluation_df = pd.DataFrame(columns=["MTP", "MRR", "MAP"])
+#["Random", "Popularity", "CB - Doc2Vec", "CF - NeuCF", "Hybrid - Doc2Vec+NeuCF"]
+
 # Lista z listami najlepszych filmów dla każdego użytkownika (wg. ocen)
 top_ratings_real = ratings_df.groupby('user_id').apply(
-    lambda x: np.array(x.sort_values('rating', ascending=False)['movie_id'].head(20)).astype('float64')).tolist()
+    lambda x: np.array(x.sort_values('rating', ascending=False)['movie_id'].head(k)).astype('float64')).tolist()
+
+# Lista z rekomendacjami losowymi
+random_topk_recommendations = random_recommender(np.sort(test.user_id.unique()), test.movie_id, k)
+
+evaluation_df.loc["Random"] = [r_metrics.mean_true_positives_percentage(top_ratings_real, random_topk_recommendations),
+                           r_metrics.mean_reciprocal_rank(top_ratings_real, random_topk_recommendations),
+                           r_metrics.mean_average_precision(top_ratings_real,random_topk_recommendations)]
+
+# Lista z rekomendacjami popularnościowymi
+popularity_topk_recommendations = popularity_recommender(np.sort(test.user_id.unique()), test.movie_id.value_counts(), k)
+
+evaluation_df.loc["Popularity"] = [r_metrics.mean_true_positives_percentage(top_ratings_real, popularity_topk_recommendations),
+                           r_metrics.mean_reciprocal_rank(top_ratings_real, popularity_topk_recommendations),
+                           r_metrics.mean_average_precision(top_ratings_real,popularity_topk_recommendations)]
+
+# Lista z rekomendacjami Doc2Vec
+doc2vec_topk_recommendations = [recommend_items_doc2vec(user_id, k) for user_id in ratings_df.user_id.unique()]
+
+evaluation_df.loc["CB - Doc2Vec"] = [r_metrics.mean_true_positives_percentage(top_ratings_real, doc2vec_topk_recommendations),
+                           r_metrics.mean_reciprocal_rank(top_ratings_real, doc2vec_topk_recommendations),
+                           r_metrics.mean_average_precision(top_ratings_real,doc2vec_topk_recommendations)]
 
 
 
-# Lista z rekomendacjami dla wszystkich użytkowników
-doc2vec_top20_recommendations = [recommend_items_doc2vec(user_id, 20) for user_id in ratings_df.user_id.unique()]
 
 
-# model Doc2Vec OCENA
-print("model Doc2Vec  OCENA")
-print("MTP: ", r_metrics.mean_true_positives_percentage(top_ratings_real, doc2vec_top20_recommendations))
-print("MRR: ", r_metrics.mean_reciprocal_rank(top_ratings_real, doc2vec_top20_recommendations))
-print("MAP: ", r_metrics.mean_average_precision(top_ratings_real,doc2vec_top20_recommendations))
 
+
+# # Model losowy OCENA
+# print("Model losowy  OCENA")
+# print("MTP: ", r_metrics.mean_true_positives_percentage(top_ratings_real, random_topk_recommendations))
+# print("MRR: ", r_metrics.mean_reciprocal_rank(top_ratings_real, random_topk_recommendations))
+# print("MAP: ", r_metrics.mean_average_precision(top_ratings_real,random_topk_recommendations))
+
+# # Model popularnościowy OCENA
+# print("Model popularnościowy  OCENA")
+# print("MTP: ", r_metrics.mean_true_positives_percentage(top_ratings_real, popularity_topk_recommendations))
+# print("MRR: ", r_metrics.mean_reciprocal_rank(top_ratings_real, popularity_topk_recommendations))
+# print("MAP: ", r_metrics.mean_average_precision(top_ratings_real,popularity_topk_recommendations))
+
+# # Model Doc2Vec OCENA
+# print("model Doc2Vec  OCENA")
+# print("MTP: ", r_metrics.mean_true_positives_percentage(top_ratings_real, doc2vec_topk_recommendations))
+# print("MRR: ", r_metrics.mean_reciprocal_rank(top_ratings_real, doc2vec_topk_recommendations))
+# print("MAP: ", r_metrics.mean_average_precision(top_ratings_real,doc2vec_topk_recommendations))
+
+
+##
 
