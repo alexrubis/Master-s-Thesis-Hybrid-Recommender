@@ -105,6 +105,7 @@ ratings_df["rating"] = MinMaxScaler(feature_range=(0,1)).fit_transform(ratings_d
 train, test = train_test_split(ratings_df, test_size=0.2, stratify=ratings_df['user_id'], random_state=1)
 #print(len(test.user_id.unique()))
 
+
 # Zmiana numeracji ID filmów w movies_df na movie_id z ratings_df.
 # movies_df zawiera dodatkowe filmy, nieobecne w ratings_df, ich id zostaje zamienione na NaN 
 movies_df["old_movie_id"] = movies_df["movie_id"]
@@ -283,6 +284,7 @@ plt.show()
 # Utworzenie macierzy rzadkiej ocen użytkowników i filmów
 ratings_sparse_matrix = ratings_df.pivot_table(index='user_id', columns='movie_id', values='rating', fill_value=np.nan)
 
+
 # Wykres macierzy rzadkiej
 fig, ax = plt.subplots(figsize=(20,5))
 sns.heatmap(ratings_sparse_matrix.isnull(), vmin=0, vmax=1, cbar=False, ax=ax).set_title("Macierz rzadka ocen użytkowników i filmów")
@@ -296,6 +298,12 @@ plt.show()
 ##############################################################################################
 ### Modele systemów rekomendacyjnych
 ##############################################################################################
+
+
+# Podział zbioru ratings_df na uczący i testowy. Podział losowy.
+train, test = train_test_split(ratings_df, test_size=0.2, stratify=ratings_df['user_id'], random_state=1)
+#print(len(test.user_id.unique()))
+
 
 ## Model losowy
 def random_recommender(users_list, movies_list, k):
@@ -346,6 +354,8 @@ def popularity_recommender(users_list, movies_popularity_list:pd.Series, k):
 
 ## Model Content Based - Doc2Vec
 
+doc2vec_vector_size = 20
+
 #  Odkomentować w celu uczenia nowego modelu Doc2Vec !!!! ######
 # # Najczęstsze i zbędne wyrazy w języku angielskim
 # stop_words = stopwords.words('english')
@@ -382,7 +392,7 @@ def popularity_recommender(users_list, movies_popularity_list:pd.Series, k):
 
 # # Tworzenie modelu Doc2Vec.
 # # dm=0 -> wykorzystanie algorytmu distributed bag of words (PV-DBOW) 
-# doc2vec_model = Doc2Vec(vector_size=20, alpha=0.025, min_alpha=0.00025, min_count=1, dm=0, workers=4)
+# doc2vec_model = Doc2Vec(vector_size=doc2vec_vector_size, alpha=0.025, min_alpha=0.00025, min_count=1, dm=0, workers=4)
 # doc2vec_model.build_vocab(tagged_docs)
 
 # # Uczenie modelu Doc2Vec
@@ -550,37 +560,292 @@ def recommend_items_doc2vec(user_id, k, show_cos_sims=False):
 
 
 
-# Sprawdzenie top 20 filmów najbardziej podobnych do przykładowego użytkownika
+## Model Collaborative Filtering - Neural Collaborative Filtering
+
+
+a = pd.DataFrame(MinMaxScaler(feature_range=(0.5,1)).fit_transform(ratings_sparse_matrix.values), 
+                          columns=ratings_sparse_matrix.columns, index=ratings_sparse_matrix.index)
+
+
+# Liczba użytkowników i filmów
+users_len  = len(ratings_df.user_id.unique())
+movies_len  = len(ratings_df.movie_id.unique())
+
+# Wielkość wektorów cech ukrytych
+movie_embedding = 50
+user_embedding = 50
+
+# Warstwy wejściowe #
+input_movie = Input(shape=[1], name='input-movie')
+input_user = Input(shape=[1], name='input-user')
+
+# Warstwy faktoryzacji macierzy #
+# Embeddingi faktoryzacji macierzy
+mf_movie_embedding = Embedding(input_dim = movies_len + 1, output_dim = movie_embedding, name='mf_movie_embedding')(input_movie)
+mf_user_embedding = Embedding(input_dim = users_len + 1, output_dim = user_embedding, name='mf_user_embedding')(input_user)
+# Spłaszczenie embeddingów
+mf_movie_flatten = Flatten(name='mf_movie_flatten')(mf_movie_embedding)
+mf_user_flatten = Flatten(name='mf_user_flatten')(mf_user_embedding)
+# Wyjście części modelu faktoryzującej macierz
+mf_output = Dot(axes=1)([mf_movie_flatten, mf_user_flatten]) 
+
+# Warstwy perceptronu wielowarstwoego #
+# Embeddingi MLP
+mlp_movie_embedding = Embedding(input_dim = movies_len + 1, output_dim = movie_embedding, name='mlp_movie_embedding')(input_movie)
+mlp_user_embedding = Embedding(input_dim = users_len + 1, output_dim = user_embedding, name='mlp_user_embedding')(input_user)
+# Spłaszczenie embeddingów
+mlp_movie_flatten = Flatten(name='mlp_movie_flatten')(mlp_movie_embedding)
+mlp_user_flatten = Flatten(name='mlp_user_flatten')(mlp_user_embedding)
+# Konkatenacja spłaszczonych embeddingów
+mlp_concatenate = Concatenate(axis=1)([mlp_movie_flatten, mlp_user_flatten]) 
+mlp_concatenate_dropout = Dropout(0.2)(mlp_concatenate)
+
+mlp_dense_1 = Dense(32, activation='relu', name='mlp_dense_1')(mlp_concatenate_dropout)
+mlp_batch_norm_1 = BatchNormalization(name='mlp_batch_norm_1')(mlp_dense_1)
+mlp_dropout_1 = Dropout(0.2)(mlp_batch_norm_1)
+mlp_dense_2 = Dense(16, activation='relu', name='mlp_dense_2')(mlp_dropout_1)
+mlp_batch_norm_2 = BatchNormalization(name='mlp_batch_norm_2')(mlp_dense_2)
+mlp_dropout_2 = Dropout(0.2)(mlp_batch_norm_2)
+# Wyjście części modelu MLP
+mlp_output = Dense(8, activation='relu', name='mlp_output')(mlp_dropout_2)
+
+# Konkatenacja wyjść obu części modelu
+mf_mlp_concat = Concatenate(axis=1)([mf_output, mlp_output])
+
+# Predykcja sieci
+output = Dense(1, name='output', activation='relu')(mf_mlp_concat)
+
+NeuCF_model = Model([input_user, input_movie], output)
+NeuCF_model.compile(optimizer=Adam(), loss='mean_absolute_error')
+
+# Uczenie modelu NeuCF
+history = NeuCF_model.fit([train.user_id, train.movie_id], train.rating, epochs=10, validation_split=0.3)
+
+# Zapisywanie modelu
+# #model.save('./models/NeuMF_20d_60e_local')
+# Wczytywanie modelu
+# NeuCF_model = keras.models.load_model('./models/NeuMF_20d_60e_local')
+
+# Wykres wartości błędu MAE
+plt.plot(history.history['loss'])
+plt.plot(history.history['val_loss'])
+plt.title('NeuCF MAE loss')
+plt.ylabel('loss')
+plt.xlabel('epoch')
+plt.legend(['train', 'test'], loc='upper left')
+plt.show()
+
+#y_hat = np.round(NeuCF_model.predict([test.user_id, test.movie_id]), decimals=4)
+
+y_true = test.rating
+
+# Predykcje ocen dla wszystkich par użytkownik film w zbiorze testowym
+test["y_hat_model_neucf"] = np.round(NeuCF_model.predict([test.user_id, test.movie_id]), decimals=4)
+
+
+
+print("MAE modelu NeuCF w zbiorze testowym: ", mean_absolute_error(y_true, test["y_hat_model_neucf"]))
+
+
+def recommend_items_neucf(user_id, k):
+    """
+    Zwraca top K przedmiotów najbardziej podobnych wg. wysokości predykowanych ocen dla użytkownika.
+
+    Parameters
+    ----------
+    user_id : int
+        id użytkownika.
+    k : int
+        liczba filmów do zarekomendowania.
     
-# Filmy rekomendowane dla przykładowego użytkownika
-example_user_top20 = recommend_items_doc2vec(example_user, 20, True)
-example_user_top20 = pd.DataFrame(example_user_top20,columns=["movie_id", "cosine_similarity"])
-example_user_top20.movie_id = example_user_top20.movie_id.astype('float64')
-example_user_top20['title'] = example_user_top20['movie_id'].map(movies_df.set_index('movie_id')['title'])
-example_user_top20['tags_list'] = example_user_top20['movie_id'].map(movies_df.set_index('movie_id')['tags_list'])
+    Returns
+    -------
+    predicted_ratings_list : list
+        lista top K filmów.
+    """
+      
+    all_movies = test['movie_id'].unique()  
+    
+    predictions = pd.DataFrame({'user_id': user_id, 'movie_id': all_movies})
 
-# Filmy najwyżej ocenione przez przykładowego użytkownika
-example_user_real_top20 = ratings_df[ratings_df['user_id'] == example_user]
-example_user_real_top20 = example_user_real_top20.drop(['user_id', 'old_movie_id', 'timestamp'], axis=1)
-example_user_real_top20['title'] = example_user_real_top20['movie_id'].map(movies_df.set_index('movie_id')['title'])
-example_user_real_top20['genres'] = example_user_real_top20['movie_id'].map(movies_df.set_index('movie_id')['genres'])
-example_user_real_top20['tags_list'] = example_user_real_top20['movie_id'].map(movies_df.set_index('movie_id')['tags_list'])
-example_user_real_top20 = example_user_real_top20.sort_values(by = "rating", ascending = False).head(20)    
-
-print("Top 20 filmów obejrzanych przez użytkownika", example_user)
-print(example_user_real_top20)
-print("Top 20 filmów zarekomendowanych dla użytkownika", example_user)
-print(example_user_top20)
+    # Wygenerowanie predykcji dla każdej pary user_id i movie_id
+    predictions['rating'] = np.round(NeuCF_model.predict([predictions['user_id'], predictions['movie_id']], verbose=False), decimals=4)
+    
+    predictions = predictions.sort_values(by="rating", ascending=False).head(k)
+    
+    return np.array(predictions["movie_id"]).astype('float64')
 
 
-## Model Content Based - Neural Collaborative Filtering
+# Model hybrydowy - połączenie NeuCF i Doc2Vec
 
+#doc2vec_movies_embbedings
+doc2vec_users_embbedings = np.array([get_doc2vec_user_vector(user_id) for user_id in ratings_df.user_id.unique()])
+
+# Liczba użytkowników i filmów
+users_len  = len(ratings_df.user_id.unique())
+movies_len  = len(ratings_df.movie_id.unique())
+
+# Wielkość wektorów cech ukrytych
+movie_embedding = 50
+user_embedding = 50
+
+# Warstwy wejściowe #
+input_movie = Input(shape=[1], name='input-movie')
+input_user = Input(shape=[1], name='input-user')
+
+# Warstwy faktoryzacji macierzy #
+# Embeddingi faktoryzacji macierzy
+mf_movie_embedding = Embedding(input_dim = movies_len + 1, output_dim = movie_embedding, name='mf_movie_embedding')(input_movie)
+mf_user_embedding = Embedding(input_dim = users_len + 1, output_dim = user_embedding, name='mf_user_embedding')(input_user)
+# Spłaszczenie embeddingów
+mf_movie_flatten = Flatten(name='mf_movie_flatten')(mf_movie_embedding)
+mf_user_flatten = Flatten(name='mf_user_flatten')(mf_user_embedding)
+# Wyjście części modelu faktoryzującej macierz
+mf_output = Dot(axes=1)([mf_movie_flatten, mf_user_flatten]) 
+
+# Warstwy perceptronu wielowarstwoego #
+# Embeddingi MLP
+mlp_movie_embedding = Embedding(input_dim = movies_len + 1, output_dim = movie_embedding, name='mlp_movie_embedding')(input_movie)
+mlp_user_embedding = Embedding(input_dim = users_len + 1, output_dim = user_embedding, name='mlp_user_embedding')(input_user)
+# Spłaszczenie embeddingów
+mlp_movie_flatten = Flatten(name='mlp_movie_flatten')(mlp_movie_embedding)
+mlp_user_flatten = Flatten(name='mlp_user_flatten')(mlp_user_embedding)
+# Konkatenacja spłaszczonych embeddingów
+mlp_concatenate = Concatenate(axis=1)([mlp_movie_flatten, mlp_user_flatten]) 
+mlp_concatenate_dropout = Dropout(0.2)(mlp_concatenate)
+
+mlp_dense_1 = Dense(32, activation='relu', name='mlp_dense_1')(mlp_concatenate_dropout)
+mlp_batch_norm_1 = BatchNormalization(name='mlp_batch_norm_1')(mlp_dense_1)
+mlp_dropout_1 = Dropout(0.2)(mlp_batch_norm_1)
+mlp_dense_2 = Dense(16, activation='relu', name='mlp_dense_2')(mlp_dropout_1)
+mlp_batch_norm_2 = BatchNormalization(name='mlp_batch_norm_2')(mlp_dense_2)
+mlp_dropout_2 = Dropout(0.2)(mlp_batch_norm_2)
+# Wyjście części modelu MLP
+mlp_output = Dense(8, activation='relu', name='mlp_output')(mlp_dropout_2)
+
+# Warstwy części content based Doc2Vec
+#doc2vec_inputs = Input(shape=(2,), name='inputs-doc2vec')
+
+doc2vec_movie_embedding = Embedding(input_dim = num_movies, output_dim = doc2vec_vector_size,
+                                                       weights=[doc2vec_movies_embbedings], 
+                                                       trainable=False, 
+                                                       name='doc2vec_movie_embedding')(input_movie)
+doc2vec_user_embedding = Embedding(input_dim = num_users, output_dim = doc2vec_vector_size,
+                                                      weights=[doc2vec_users_embbedings], 
+                                                      trainable=False,
+                                                      name='doc2vec_user_embedding')(input_user)
+
+doc2vec_movie_flatten = Flatten(name='doc2vec_movie_flatten')(doc2vec_movie_embedding)
+doc2vec_user_flatten = Flatten(name='doc2vec_user_flatten')(doc2vec_user_embedding)
+
+doc2vec_concatenate = Concatenate()([doc2vec_movie_flatten, doc2vec_user_flatten])
+doc2vec_dense_1 = Dense(units=16, activation='relu', name='doc2vec_dense_1')(doc2vec_concatenate)
+doc2vec_output = Dense(8, activation='relu', name='doc2vec_output')(doc2vec_dense_1)
+# Konkatenacja wyjść części modelu
+mf_mlp_doc2vec_concat = Concatenate(axis=1)([mf_output, mlp_output, doc2vec_output])
+
+# Predykcja sieci
+output = Dense(1, name='output', activation='relu')(mf_mlp_doc2vec_concat)
+
+Hybrid_model = Model([input_user, input_movie], output)
+Hybrid_model.compile(optimizer=Adam(), loss='mean_absolute_error')
+
+#SVG(model_to_dot(Hybrid_model, show_shapes=True).create(prog='dot', format='svg'))
+#SVG(model_to_dot(Hybrid_model, show_shapes= True, show_layer_names=True, dpi=65).create(prog='dot', format='svg'))
+
+
+# Uczenie modelu hybrydowego
+history_hybrid = Hybrid_model.fit([train.user_id, train.movie_id], train.rating, epochs=10, validation_split=0.3)
+
+# Zapisywanie modelu
+# #Hybrid_model.save('./models/Hybrid_model_20d_60e_local')
+# Wczytywanie modelu
+# Hybrid_model = keras.models.load_model('./models/Hybrid_model_20d_60e_local')
+
+# Wykres wartości błędu MAE
+plt.plot(history_hybrid.history['loss'])
+plt.plot(history_hybrid.history['val_loss'])
+plt.title('Hybrid model MAE loss')
+plt.ylabel('loss')
+plt.xlabel('epoch')
+plt.legend(['train', 'test'], loc='upper left')
+plt.show()
+
+#y_hat = np.round(NeuCF_model.predict([test.user_id, test.movie_id]), decimals=4)
+
+y_true = test.rating
+
+# Predykcje ocen dla wszystkich par użytkownik film w zbiorze testowym
+test["y_hat_model_hybrid"] = np.round(Hybrid_model.predict([test.user_id, test.movie_id]), decimals=4)
+
+
+print("MAE modelu NeuCF w zbiorze testowym: ", mean_absolute_error(y_true, test["y_hat_model_neucf"]))
+
+
+def recommend_items_hybrid(user_id, k):
+    """
+    Zwraca top K przedmiotów najbardziej podobnych wg. wysokości predykowanych ocen dla użytkownika.
+
+    Parameters
+    ----------
+    user_id : int
+        id użytkownika.
+    k : int
+        liczba filmów do zarekomendowania.
+    
+    Returns
+    -------
+    predicted_ratings_list : list
+        lista top K filmów.
+    """
+      
+    all_movies = test['movie_id'].unique()  
+    
+    predictions = pd.DataFrame({'user_id': user_id, 'movie_id': all_movies})
+
+    # Wygenerowanie predykcji dla każdej pary user_id i movie_id
+    predictions['rating'] = np.round(Hybrid_model.predict([predictions['user_id'], predictions['movie_id']], verbose=False), decimals=4)
+    
+    predictions = predictions.sort_values(by="rating", ascending=False).head(k)
+    
+    return np.array(predictions["movie_id"]).astype('float64')
 
 
 
 ##############################################################################################
 ### Ewaluacja modeli ###
 ##############################################################################################
+# Sprawdzanie rekomendacji dla przykładowego użytkownika
+def check_user_recs(user_id,users_predicted_ratings_list):
+    """
+    Wyświetla listę topk filmów rzeczywiście ocenionych przez podanego użytkownika 
+    oraz listę topk filmów zarekomendowanych dla użytkownika przez dany model.
+
+    Parameters
+    ----------
+    user_id : int
+        id użytkownika.
+    users_predicted_ratings_list : list
+        lista list topk rekomendacji utworzyonych prez jeden z modelu rekomendacji.
+
+    Returns
+    -------
+    None.
+
+    """
+    
+    #pd.set_option('display.max_columns', 6)
+    print("Obejrzane filmy: ")
+    example_true_ratings_list = top_ratings_real[user_id]
+    example_true_ratings_list_df = movies_df[movies_df['movie_id'].isin(example_true_ratings_list)]
+    print(example_true_ratings_list_df.loc[:, ['title', 'genres']].to_string(index=False))
+    
+    print("Rekomendowane filmy: ")
+    example_predicted_ratings_list = users_predicted_ratings_list[user_id]
+    example_predicted_ratings_list_df = movies_df[movies_df['movie_id'].isin(example_predicted_ratings_list)]
+    print(example_predicted_ratings_list_df.loc[:, ['title', 'genres']].to_string(index=False))
+
+
 
 k = 20
 
@@ -588,31 +853,86 @@ k = 20
 evaluation_df = pd.DataFrame(columns=["MTP", "MRR", "MAP"])
 #["Random", "Popularity", "CB - Doc2Vec", "CF - NeuCF", "Hybrid - Doc2Vec+NeuCF"]
 
+
+################## Prawdziwe oceny ##################
 # Lista z listami najlepszych filmów dla każdego użytkownika (wg. ocen)
-top_ratings_real = ratings_df.groupby('user_id').apply(
+top_ratings_real = test.groupby('user_id').apply(
     lambda x: np.array(x.sort_values('rating', ascending=False)['movie_id'].head(k)).astype('float64')).tolist()
 
-# Lista z rekomendacjami losowymi
-random_topk_recommendations = random_recommender(np.sort(test.user_id.unique()), test.movie_id, k)
+
+###### Rekomendacja losowa
+random_topk_recommendations = random_recommender(np.sort(test.user_id.unique()), np.sort(test.user_id.unique()), k)
+
+# Sprawdzenie rekomendacji dla wybranych użytkowników
+check_user_recs(1,random_topk_recommendations)
+
+check_user_recs(100,random_topk_recommendations)
+
+check_user_recs(150,random_topk_recommendations)
 
 evaluation_df.loc["Random"] = [r_metrics.mean_true_positives_percentage(top_ratings_real, random_topk_recommendations),
                            r_metrics.mean_reciprocal_rank(top_ratings_real, random_topk_recommendations),
                            r_metrics.mean_average_precision(top_ratings_real,random_topk_recommendations)]
 
-# Lista z rekomendacjami popularnościowymi
+
+################## Rekomendacja popularnościowa ##################
 popularity_topk_recommendations = popularity_recommender(np.sort(test.user_id.unique()), test.movie_id.value_counts(), k)
+
+# Sprawdzenie rekomendacji dla wybranych użytkowników
+check_user_recs(1,popularity_topk_recommendations)
+
+check_user_recs(100,popularity_topk_recommendations)
+
+check_user_recs(150,popularity_topk_recommendations)
 
 evaluation_df.loc["Popularity"] = [r_metrics.mean_true_positives_percentage(top_ratings_real, popularity_topk_recommendations),
                            r_metrics.mean_reciprocal_rank(top_ratings_real, popularity_topk_recommendations),
                            r_metrics.mean_average_precision(top_ratings_real,popularity_topk_recommendations)]
 
-# Lista z rekomendacjami Doc2Vec
+################## Rekomendacja content based Doc2Vec ##################
 doc2vec_topk_recommendations = [recommend_items_doc2vec(user_id, k) for user_id in ratings_df.user_id.unique()]
+
+# Sprawdzenie rekomendacji dla wybranych użytkowników
+check_user_recs(1,doc2vec_topk_recommendations)
+
+check_user_recs(100,doc2vec_topk_recommendations)
+
+check_user_recs(150,doc2vec_topk_recommendations)
 
 evaluation_df.loc["CB - Doc2Vec"] = [r_metrics.mean_true_positives_percentage(top_ratings_real, doc2vec_topk_recommendations),
                            r_metrics.mean_reciprocal_rank(top_ratings_real, doc2vec_topk_recommendations),
                            r_metrics.mean_average_precision(top_ratings_real,doc2vec_topk_recommendations)]
 
+
+
+################## Rekomendacja collaborative filtering NeuCF ##################
+# Długie działanie! 
+neucf_topk_recommendations = [recommend_items_neucf(user_id, k) for user_id in test.user_id.unique()]
+
+check_user_recs(1,neucf_topk_recommendations)
+
+check_user_recs(100,neucf_topk_recommendations)
+
+check_user_recs(150,neucf_topk_recommendations)
+
+evaluation_df.loc["CF - NeuCF"] = [r_metrics.mean_true_positives_percentage(top_ratings_real, neucf_topk_recommendations),
+                           r_metrics.mean_reciprocal_rank(top_ratings_real, neucf_topk_recommendations),
+                           r_metrics.mean_average_precision(top_ratings_real,neucf_topk_recommendations)]
+
+
+
+################## Rekomendacja hybrydowa NeuCF Doc2Vec + NeuCF ##################
+hybrid_topk_recommendations = [recommend_items_hybrid(user_id, k) for user_id in ratings_df.user_id.unique()]
+
+check_user_recs(1,hybrid_topk_recommendations)
+
+check_user_recs(100,hybrid_topk_recommendations)
+
+check_user_recs(150,hybrid_topk_recommendations)
+
+evaluation_df.loc["Hybrid model"] = [r_metrics.mean_true_positives_percentage(top_ratings_real, hybrid_topk_recommendations),
+                           r_metrics.mean_reciprocal_rank(top_ratings_real, hybrid_topk_recommendations),
+                           r_metrics.mean_average_precision(top_ratings_real,hybrid_topk_recommendations)]
 
 
 
