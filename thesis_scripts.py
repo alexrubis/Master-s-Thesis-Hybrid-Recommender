@@ -12,6 +12,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.preprocessing import StandardScaler,MinMaxScaler
+from sklearn.metrics import mean_absolute_error
 from gensim.models.doc2vec import Doc2Vec, TaggedDocument
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
@@ -21,13 +22,13 @@ from sklearn.model_selection import train_test_split
 import random
 import r_metrics
 
-# from tensorflow.keras.models import Model, Sequential
-# from tensorflow.keras.layers import Embedding, Flatten, Input,  Dot,Dropout, Dense, BatchNormalization, Concatenate
-# from tensorflow.keras.utils import model_to_dot
-# from tensorflow.keras.optimizers import Adam
-# from tensorflow import keras
-# from tensorflow.keras.constraints import NonNeg
-#from IPython.display import SVG
+from tensorflow.keras.models import Model, Sequential
+from tensorflow.keras.layers import Embedding, Flatten, Input,  Dot,Dropout, Dense, BatchNormalization, Concatenate
+from tensorflow.keras.utils import model_to_dot
+from tensorflow.keras.optimizers import Adam
+from tensorflow import keras
+from tensorflow.keras.constraints import NonNeg
+from IPython.display import SVG
 
 #import recmetrics
 
@@ -350,6 +351,52 @@ def popularity_recommender(users_list, movies_popularity_list:pd.Series, k):
     return predicted_ratings_list
 
 
+## Model SVD z biblioteki surprise
+from surprise import accuracy, Dataset, SVD, Reader
+from surprise.model_selection import train_test_split as surprise_train_test_split
+
+
+svd_reader = Reader(rating_scale=(0.0, 1.0))
+
+svd_data = Dataset.load_from_df(ratings_df[['user_id', 'movie_id', 'rating']], svd_reader)
+
+svd_trainset, svd_testset = surprise_train_test_split(data, test_size=0.2)
+
+
+svd_algo = SVD()
+
+svd_algo.fit(svd_trainset)
+svd_predictions = algo.test(svd_testset)
+
+#accuracy.mae(svd_predictions)
+
+svd_test_df = pd.DataFrame(svd_testset, columns=['user_id', 'movie_id', 'rating'])
+
+svd_unique_users = svd_test_df.user_id.unique()
+svd_unique_movies =  svd_test_df.movie_id.unique()
+
+def pred_user_svd(user_id):
+
+  predictions = []
+  for item in svd_unique_movies:
+      prediction = algo.predict(user_id, item)
+      predictions.append(prediction)
+
+  predictions.sort(key=lambda x: x.est, reverse=True)
+
+  top_movies = [pred.iid for pred in predictions[:20]]
+
+  return top_movies
+
+svd_topk_ratings = [np.array(pred_user_svd(user_id)) for user_id in svd_unique_users]
+
+# Lista z listami najlepszych filmów dla każdego użytkownika (wg. ocen) dla SVD
+svd_top_ratings_real = svd_test_df.groupby('user_id').apply(
+    lambda x: np.array(x.sort_values('rating', ascending=False)['movie_id'].head(k)).astype('float64')).tolist()
+
+evaluation_df.loc["SVD"] = [r_metrics.mean_true_positives_percentage(svd_top_ratings_real, svd_topk_ratings),
+                           r_metrics.mean_reciprocal_rank(svd_top_ratings_real, svd_topk_ratings),
+                           r_metrics.mean_average_precision(svd_top_ratings_real,svd_topk_ratings)]
 
 
 ## Model Content Based - Doc2Vec
@@ -563,8 +610,8 @@ def recommend_items_doc2vec(user_id, k, show_cos_sims=False):
 ## Model Collaborative Filtering - Neural Collaborative Filtering
 
 
-a = pd.DataFrame(MinMaxScaler(feature_range=(0.5,1)).fit_transform(ratings_sparse_matrix.values), 
-                          columns=ratings_sparse_matrix.columns, index=ratings_sparse_matrix.index)
+#a = pd.DataFrame(MinMaxScaler(feature_range=(0.5,1)).fit_transform(ratings_sparse_matrix.values), 
+ #                         columns=ratings_sparse_matrix.columns, index=ratings_sparse_matrix.index)
 
 
 # Liczba użytkowników i filmów
@@ -619,7 +666,15 @@ NeuCF_model = Model([input_user, input_movie], output)
 NeuCF_model.compile(optimizer=Adam(), loss='mean_absolute_error')
 
 # Uczenie modelu NeuCF
-history = NeuCF_model.fit([train.user_id, train.movie_id], train.rating, epochs=10, validation_split=0.3)
+history = NeuCF_model.fit([train.user_id, train.movie_id], train.rating, epochs=10)#, validation_split=0.3)
+
+
+testNeuCF_model = Model([input_user, input_movie], output)
+testNeuCF_model.compile(optimizer=Adam(), loss='mean_absolute_error')
+
+# Uczenie modelu NeuCF
+#testhistory = testNeuCF_model.fit([train.user_id, train.movie_id], train.rating, epochs=10)#, validation_split=0.3)
+
 
 # Zapisywanie modelu
 # #model.save('./models/NeuMF_20d_60e_local')
@@ -675,7 +730,6 @@ def recommend_items_neucf(user_id, k):
     
     return np.array(predictions["movie_id"]).astype('float64')
 
-
 # Model hybrydowy - połączenie NeuCF i Doc2Vec
 
 #doc2vec_movies_embbedings
@@ -726,11 +780,11 @@ mlp_output = Dense(8, activation='relu', name='mlp_output')(mlp_dropout_2)
 # Warstwy części content based Doc2Vec
 #doc2vec_inputs = Input(shape=(2,), name='inputs-doc2vec')
 
-doc2vec_movie_embedding = Embedding(input_dim = num_movies, output_dim = doc2vec_vector_size,
+doc2vec_movie_embedding = Embedding(input_dim = movies_len, output_dim = doc2vec_vector_size,
                                                        weights=[doc2vec_movies_embbedings], 
                                                        trainable=False, 
                                                        name='doc2vec_movie_embedding')(input_movie)
-doc2vec_user_embedding = Embedding(input_dim = num_users, output_dim = doc2vec_vector_size,
+doc2vec_user_embedding = Embedding(input_dim = users_len, output_dim = doc2vec_vector_size,
                                                       weights=[doc2vec_users_embbedings], 
                                                       trainable=False,
                                                       name='doc2vec_user_embedding')(input_user)
@@ -755,7 +809,7 @@ Hybrid_model.compile(optimizer=Adam(), loss='mean_absolute_error')
 
 
 # Uczenie modelu hybrydowego
-history_hybrid = Hybrid_model.fit([train.user_id, train.movie_id], train.rating, epochs=10, validation_split=0.3)
+history_hybrid = Hybrid_model.fit([train.user_id, train.movie_id], train.rating, epochs=10)#, validation_split=0.3)
 
 # Zapisywanie modelu
 # #Hybrid_model.save('./models/Hybrid_model_20d_60e_local')
@@ -779,7 +833,7 @@ y_true = test.rating
 test["y_hat_model_hybrid"] = np.round(Hybrid_model.predict([test.user_id, test.movie_id]), decimals=4)
 
 
-print("MAE modelu NeuCF w zbiorze testowym: ", mean_absolute_error(y_true, test["y_hat_model_neucf"]))
+print("MAE modelu Hybrid_model w zbiorze testowym: ", mean_absolute_error(y_true, test["y_hat_model_hybrid"]))
 
 
 def recommend_items_hybrid(user_id, k):
@@ -861,7 +915,7 @@ top_ratings_real = test.groupby('user_id').apply(
 
 
 ###### Rekomendacja losowa
-random_topk_recommendations = random_recommender(np.sort(test.user_id.unique()), np.sort(test.user_id.unique()), k)
+random_topk_recommendations = random_recommender(np.sort(test.user_id.unique()), np.sort(test.movie_id.unique()), k)
 
 # Sprawdzenie rekomendacji dla wybranych użytkowników
 check_user_recs(1,random_topk_recommendations)
@@ -909,7 +963,43 @@ evaluation_df.loc["CB - Doc2Vec"] = [r_metrics.mean_true_positives_percentage(to
 # Długie działanie! 
 neucf_topk_recommendations = [recommend_items_neucf(user_id, k) for user_id in test.user_id.unique()]
 
-check_user_recs(1,neucf_topk_recommendations)
+
+
+def test_recommend_items_neucf(user_id, k):
+    """
+    Zwraca top K przedmiotów najbardziej podobnych wg. wysokości predykowanych ocen dla użytkownika.
+
+    Parameters
+    ----------
+    user_id : int
+        id użytkownika.
+    k : int
+        liczba filmów do zarekomendowania.
+    
+    Returns
+    -------
+    predicted_ratings_list : list
+        lista top K filmów.
+    """
+      
+    all_movies = test['movie_id'].unique()  
+    
+    predictions = pd.DataFrame({'user_id': user_id, 'movie_id': all_movies})
+
+    # Wygenerowanie predykcji dla każdej pary user_id i movie_id
+    predictions['rating'] = np.round(testNeuCF_model.predict([predictions['user_id'], predictions['movie_id']], verbose=False), decimals=4)
+    
+    predictions = predictions.sort_values(by="rating", ascending=False).head(k)
+    
+    return np.array(predictions["movie_id"]).astype('float64')
+
+
+
+testNeuCF_modelneucf_topk_recommendations = [test_recommend_items_neucf(user_id, k) for user_id in test.user_id.unique()]
+
+
+
+check_user_recs(1,testNeuCF_modelneucf_topk_recommendations)
 
 check_user_recs(100,neucf_topk_recommendations)
 
@@ -919,6 +1009,9 @@ evaluation_df.loc["CF - NeuCF"] = [r_metrics.mean_true_positives_percentage(top_
                            r_metrics.mean_reciprocal_rank(top_ratings_real, neucf_topk_recommendations),
                            r_metrics.mean_average_precision(top_ratings_real,neucf_topk_recommendations)]
 
+evaluation_df.loc["TEST CF - NeuCF"] = [r_metrics.mean_true_positives_percentage(top_ratings_real, testNeuCF_modelneucf_topk_recommendations),
+                           r_metrics.mean_reciprocal_rank(top_ratings_real, testNeuCF_modelneucf_topk_recommendations),
+                           r_metrics.mean_average_precision(top_ratings_real,testNeuCF_modelneucf_topk_recommendations)]
 
 
 ################## Rekomendacja hybrydowa NeuCF Doc2Vec + NeuCF ##################

@@ -147,7 +147,7 @@ def mean_ndcg(ratings_lists_list):
 
 def mean_true_positives_percentage(y,y_hat):
     '''
-    Funkcja licząca stosunek prawdziwych pozytywów (filmów które użytkownik faktycznie polubił i które zostały mu zarekomendowany) do wszystkich zarekomendowanych filmów
+    Funkcja licząca stosunek prawdziwych pozytywów (filmów które użytkownik faktycznie polubił i które zostały mu zarekomendowane) do wszystkich zarekomendowanych filmów
     w listach rekomendacji wszystkich użytkowników.     
     Parameters
     ----------
