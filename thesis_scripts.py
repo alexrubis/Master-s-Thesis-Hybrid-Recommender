@@ -33,7 +33,6 @@ from IPython.display import SVG
 #import recmetrics
 
 
-
 ##############################################################################################
 ### Wczytanie i edycja zbioru movielens
 ##############################################################################################
@@ -248,7 +247,6 @@ def find_x_at_halfarea(counts):
     x_at_halfarea = next(i for i, v in enumerate(rating_counts_integral_to_x) if v >= half_area)
     return x_at_halfarea
 
-
     
 # Liczba ocen wystawionych dla każdego z filmów
 movies_ratings_counts = ratings_df.groupby("movie_id").count()["rating"].sort_values(ascending=False).reset_index(drop=True) 
@@ -295,11 +293,9 @@ ax.set_title('Macierz rzadka ocen użytkowników i filmów', fontsize = 18)
 plt.show()
 
 
-
 ##############################################################################################
 ### Modele systemów rekomendacyjnych
 ##############################################################################################
-
 
 # Podział zbioru ratings_df na uczący i testowy. Podział losowy.
 train, test = train_test_split(ratings_df, test_size=0.2, stratify=ratings_df['user_id'], random_state=1)
@@ -326,7 +322,6 @@ def random_recommender(users_list, movies_list, k):
     predicted_ratings_list = [np.array(random.sample(list(movies_list), k)) for user in range(len(users_list))]
     
     return predicted_ratings_list
-
 
 
 ## Model popularnościowy
@@ -387,16 +382,6 @@ def pred_user_svd(user_id):
   top_movies = [pred.iid for pred in predictions[:20]]
 
   return top_movies
-
-svd_topk_ratings = [np.array(pred_user_svd(user_id)) for user_id in svd_unique_users]
-
-# Lista z listami najlepszych filmów dla każdego użytkownika (wg. ocen) dla SVD
-svd_top_ratings_real = svd_test_df.groupby('user_id').apply(
-    lambda x: np.array(x.sort_values('rating', ascending=False)['movie_id'].head(k)).astype('float64')).tolist()
-
-evaluation_df.loc["SVD"] = [r_metrics.mean_true_positives_percentage(svd_top_ratings_real, svd_topk_ratings),
-                           r_metrics.mean_reciprocal_rank(svd_top_ratings_real, svd_topk_ratings),
-                           r_metrics.mean_average_precision(svd_top_ratings_real,svd_topk_ratings)]
 
 
 ## Model Content Based - Doc2Vec
@@ -508,69 +493,70 @@ plt.show()
 
 # Wizualizacja wektorów z pomocą narzędzia UMAP
 
-# # redukcja do 2 wymiarów
-# doc2vec_movies_embbedings_umap = umap.UMAP(n_components=2, n_neighbors = 10, min_dist = 0.005, metric = 'cosine').fit_transform(doc2vec_movies_embbedings)
+# redukcja do 2 wymiarów
+doc2vec_movies_embbedings_umap = umap.UMAP(n_components=2, n_neighbors = 10, min_dist = 0.005, metric = 'cosine').fit_transform(doc2vec_movies_embbedings)
 
-# x = doc2vec_movies_embbedings_umap[:,0]
-# y = doc2vec_movies_embbedings_umap[:,1]
+x = doc2vec_movies_embbedings_umap[:,0]
+y = doc2vec_movies_embbedings_umap[:,1]
 
 
-# fig, ax = plt.subplots(figsize=(15, 10))
-# plt.axis('off')
-# plt.title('Wektory filmów zredukowane do 2D')
-# plt.scatter(x, y, s=1)
+fig, ax = plt.subplots(figsize=(15, 10))
+plt.axis('off')
+plt.title('Wektory filmów zredukowane do 2D')
+plt.scatter(x, y, s=1)
 
-# # Wskazanie pozycji wybranych filmów
-# ax.annotate("Toy Story",
-#             xy=(x[0], y[0]),
-#             xytext=(x[0]+1, y[0]+0),
-#             arrowprops=dict(facecolor='black', width=0.001, headwidth=4))
-# ax.annotate("Toy Story 2",
-#             xy=(x[729], y[729]),
-#             xytext=(x[729]+1, y[729]+1),
-#             arrowprops=dict(facecolor='black', width=0.001, headwidth=4))
-# ax.annotate("Shrek",
-#             xy=(x[738], y[738]),
-#             xytext=(x[738]+0.5, y[738]+1),
-#             arrowprops=dict(facecolor='black', width=0.001, headwidth=4))
-# ax.annotate("The Shining",
-#             xy=(x[7855], y[7855]),
-#             xytext=(x[7855]+1, y[7855]+1),
-#             arrowprops=dict(facecolor='black', width=0.001, headwidth=4))
-# ax.annotate("2001: A Space Odyssey",
-#             xy=(x[717], y[717]),
-#             xytext=(x[717]+1, y[717]+0),
-#             arrowprops=dict(facecolor='black', width=0.001, headwidth=4))
-# ax.annotate("Contact",
-#             xy=(x[720], y[720]),
-#             xytext=(x[720]+1.5, y[720]+0.8),
-#             arrowprops=dict(facecolor='black', width=0.001, headwidth=4))
-# ax.annotate("Arrival",
-#             xy=(x[1367], y[1367]),
-#             xytext=(x[1367]+2, y[1367]+2),
-#             arrowprops=dict(facecolor='black', width=0.001, headwidth=4))
-# ax.annotate("Pretty Woman",
-#             xy=(x[477], y[477]),
-#             xytext=(x[477]-1, y[477]+1),
-#             arrowprops=dict(facecolor='black', width=0.001, headwidth=4))
-# ax.annotate("Bridget Jones's Diary",
-#             xy=(x[444], y[444]),
-#             xytext=(x[444]-2, y[444]+2),
-#             arrowprops=dict(facecolor='black', width=0.001, headwidth=4))
-# plt.show()
+# Wskazanie pozycji wybranych filmów
+ax.annotate("Toy Story",
+            xy=(x[0], y[0]),
+            xytext=(x[0]+1, y[0]+0),
+            arrowprops=dict(facecolor='black', width=0.001, headwidth=4))
+ax.annotate("Toy Story 2",
+            xy=(x[729], y[729]),
+            xytext=(x[729]+1, y[729]+1),
+            arrowprops=dict(facecolor='black', width=0.001, headwidth=4))
+ax.annotate("Shrek",
+            xy=(x[738], y[738]),
+            xytext=(x[738]+0.5, y[738]+1),
+            arrowprops=dict(facecolor='black', width=0.001, headwidth=4))
+ax.annotate("The Shining",
+            xy=(x[7855], y[7855]),
+            xytext=(x[7855]+1, y[7855]+1),
+            arrowprops=dict(facecolor='black', width=0.001, headwidth=4))
+ax.annotate("2001: A Space Odyssey",
+            xy=(x[717], y[717]),
+            xytext=(x[717]+1, y[717]+0),
+            arrowprops=dict(facecolor='black', width=0.001, headwidth=4))
+ax.annotate("Contact",
+            xy=(x[720], y[720]),
+            xytext=(x[720]+1.5, y[720]+0.8),
+            arrowprops=dict(facecolor='black', width=0.001, headwidth=4))
+ax.annotate("Arrival",
+            xy=(x[1367], y[1367]),
+            xytext=(x[1367]+2, y[1367]+2),
+            arrowprops=dict(facecolor='black', width=0.001, headwidth=4))
+ax.annotate("Pretty Woman",
+            xy=(x[477], y[477]),
+            xytext=(x[477]-1, y[477]+1),
+            arrowprops=dict(facecolor='black', width=0.001, headwidth=4))
+ax.annotate("Bridget Jones's Diary",
+            xy=(x[444], y[444]),
+            xytext=(x[444]-2, y[444]+2),
+            arrowprops=dict(facecolor='black', width=0.001, headwidth=4))
+plt.show()
 
 
 ## Tworzenie profili użytkowników poprzez uśrednienie wektorów obejrzanych przez nich filmów
 
-# Wybranie filmów ocenionych wyższej niż 2.0 ( 0.44... po normalizacji) ze zbioru testowego, zakładając, 
+# Wybranie filmów ocenionych wyższej niż 3.0 ( 0.55... po normalizacji) ze zbioru TRENINGOWEGO, zakładając, 
 # że oceny niższe oznaczają, że użytkownik nie jest zainteresowany danymi filmami
-ratings_df_filtered = ratings_df[ratings_df["rating"] > 0.44]
+#ratings_df_filtered = ratings_df[ratings_df["rating"] > 0.44]
+doc2vec_train_filtered = train[train["rating"] > 0.55]
 
 def get_doc2vec_user_vector(user_id):
     """
     Zwraca wektor stanowiący profil użytkownika.
     """        
-    user_movies = ratings_df_filtered["movie_id"][ratings_df_filtered["user_id"] == user_id]    
+    user_movies = doc2vec_train_filtered["movie_id"][doc2vec_train_filtered["user_id"] == user_id]    
     user_vectors = doc2vec_movies_embbedings[user_movies, :]    
     user_vectors_mean = np.mean(user_vectors, axis=0) 
     
@@ -606,13 +592,7 @@ def recommend_items_doc2vec(user_id, k, show_cos_sims=False):
     return array[:,0]
 
 
-
 ## Model Collaborative Filtering - Neural Collaborative Filtering
-
-
-#a = pd.DataFrame(MinMaxScaler(feature_range=(0.5,1)).fit_transform(ratings_sparse_matrix.values), 
- #                         columns=ratings_sparse_matrix.columns, index=ratings_sparse_matrix.index)
-
 
 # Liczba użytkowników i filmów
 users_len  = len(ratings_df.user_id.unique())
@@ -675,7 +655,6 @@ testNeuCF_model.compile(optimizer=Adam(), loss='mean_absolute_error')
 # Uczenie modelu NeuCF
 #testhistory = testNeuCF_model.fit([train.user_id, train.movie_id], train.rating, epochs=10)#, validation_split=0.3)
 
-
 # Zapisywanie modelu
 # #model.save('./models/NeuMF_20d_60e_local')
 # Wczytywanie modelu
@@ -690,14 +669,10 @@ plt.xlabel('epoch')
 plt.legend(['train', 'test'], loc='upper left')
 plt.show()
 
-#y_hat = np.round(NeuCF_model.predict([test.user_id, test.movie_id]), decimals=4)
-
 y_true = test.rating
 
 # Predykcje ocen dla wszystkich par użytkownik film w zbiorze testowym
 test["y_hat_model_neucf"] = np.round(NeuCF_model.predict([test.user_id, test.movie_id]), decimals=4)
-
-
 
 print("MAE modelu NeuCF w zbiorze testowym: ", mean_absolute_error(y_true, test["y_hat_model_neucf"]))
 
@@ -865,7 +840,6 @@ def recommend_items_hybrid(user_id, k):
     return np.array(predictions["movie_id"]).astype('float64')
 
 
-
 ##############################################################################################
 ### Ewaluacja modeli ###
 ##############################################################################################
@@ -900,12 +874,10 @@ def check_user_recs(user_id,users_predicted_ratings_list):
     print(example_predicted_ratings_list_df.loc[:, ['title', 'genres']].to_string(index=False))
 
 
-
 k = 20
 
 # Tabela wyników ewaluacji
 evaluation_df = pd.DataFrame(columns=["MTP", "MRR", "MAP"])
-#["Random", "Popularity", "CB - Doc2Vec", "CF - NeuCF", "Hybrid - Doc2Vec+NeuCF"]
 
 
 ################## Prawdziwe oceny ##################
@@ -943,8 +915,33 @@ evaluation_df.loc["Popularity"] = [r_metrics.mean_true_positives_percentage(top_
                            r_metrics.mean_reciprocal_rank(top_ratings_real, popularity_topk_recommendations),
                            r_metrics.mean_average_precision(top_ratings_real,popularity_topk_recommendations)]
 
+
+################## Rekomendacja SVD ##################
+svd_topk_recommendations = [np.array(pred_user_svd(user_id)) for user_id in svd_unique_users]
+
+# Lista z listami najlepszych filmów dla każdego użytkownika (wg. ocen) dla SVD
+svd_top_ratings_real = svd_test_df.groupby('user_id').apply(
+    lambda x: np.array(x.sort_values('rating', ascending=False)['movie_id'].head(k)).astype('float64')).tolist()
+
+# Sprawdzenie rekomendacji dla wybranych użytkowników
+check_user_recs(1,svd_topk_recommendations)
+
+check_user_recs(100,svd_topk_recommendations)
+
+check_user_recs(150,svd_topk_recommendations)
+
+evaluation_df.loc["SVD"] = [r_metrics.mean_true_positives_percentage(svd_top_ratings_real, svd_topk_ratings),
+                           r_metrics.mean_reciprocal_rank(svd_top_ratings_real, svd_topk_ratings),
+                           r_metrics.mean_average_precision(svd_top_ratings_real,svd_topk_ratings)]
+
+
 ################## Rekomendacja content based Doc2Vec ##################
-doc2vec_topk_recommendations = [recommend_items_doc2vec(user_id, k) for user_id in ratings_df.user_id.unique()]
+
+# Lista z listami najlepszych filmów dla każdego użytkownika (wg. ocen) dla modelu Doc2Vec
+doc2vec_top_ratings_real = test[test['user_id'].isin(doc2vec_train_filtered['user_id'])].groupby('user_id').apply(
+    lambda x: np.array(x.sort_values('rating', ascending=False)['movie_id'].head(k)).astype('float64')).tolist()
+
+doc2vec_topk_recommendations = [recommend_items_doc2vec(user_id, k) for user_id in doc2vec_train_filtered.user_id.unique()]
 
 # Sprawdzenie rekomendacji dla wybranych użytkowników
 check_user_recs(1,doc2vec_topk_recommendations)
@@ -953,9 +950,9 @@ check_user_recs(100,doc2vec_topk_recommendations)
 
 check_user_recs(150,doc2vec_topk_recommendations)
 
-evaluation_df.loc["CB - Doc2Vec"] = [r_metrics.mean_true_positives_percentage(top_ratings_real, doc2vec_topk_recommendations),
-                           r_metrics.mean_reciprocal_rank(top_ratings_real, doc2vec_topk_recommendations),
-                           r_metrics.mean_average_precision(top_ratings_real,doc2vec_topk_recommendations)]
+evaluation_df.loc["CB - Doc2Vec"] = [r_metrics.mean_true_positives_percentage(doc2vec_top_ratings_real, doc2vec_topk_recommendations),
+                           r_metrics.mean_reciprocal_rank(doc2vec_top_ratings_real, doc2vec_topk_recommendations),
+                           r_metrics.mean_average_precision(doc2vec_top_ratings_real,doc2vec_topk_recommendations)]
 
 
 
@@ -963,43 +960,7 @@ evaluation_df.loc["CB - Doc2Vec"] = [r_metrics.mean_true_positives_percentage(to
 # Długie działanie! 
 neucf_topk_recommendations = [recommend_items_neucf(user_id, k) for user_id in test.user_id.unique()]
 
-
-
-def test_recommend_items_neucf(user_id, k):
-    """
-    Zwraca top K przedmiotów najbardziej podobnych wg. wysokości predykowanych ocen dla użytkownika.
-
-    Parameters
-    ----------
-    user_id : int
-        id użytkownika.
-    k : int
-        liczba filmów do zarekomendowania.
-    
-    Returns
-    -------
-    predicted_ratings_list : list
-        lista top K filmów.
-    """
-      
-    all_movies = test['movie_id'].unique()  
-    
-    predictions = pd.DataFrame({'user_id': user_id, 'movie_id': all_movies})
-
-    # Wygenerowanie predykcji dla każdej pary user_id i movie_id
-    predictions['rating'] = np.round(testNeuCF_model.predict([predictions['user_id'], predictions['movie_id']], verbose=False), decimals=4)
-    
-    predictions = predictions.sort_values(by="rating", ascending=False).head(k)
-    
-    return np.array(predictions["movie_id"]).astype('float64')
-
-
-
-testNeuCF_modelneucf_topk_recommendations = [test_recommend_items_neucf(user_id, k) for user_id in test.user_id.unique()]
-
-
-
-check_user_recs(1,testNeuCF_modelneucf_topk_recommendations)
+check_user_recs(1,neucf_topk_recommendations)
 
 check_user_recs(100,neucf_topk_recommendations)
 
@@ -1008,10 +969,6 @@ check_user_recs(150,neucf_topk_recommendations)
 evaluation_df.loc["CF - NeuCF"] = [r_metrics.mean_true_positives_percentage(top_ratings_real, neucf_topk_recommendations),
                            r_metrics.mean_reciprocal_rank(top_ratings_real, neucf_topk_recommendations),
                            r_metrics.mean_average_precision(top_ratings_real,neucf_topk_recommendations)]
-
-evaluation_df.loc["TEST CF - NeuCF"] = [r_metrics.mean_true_positives_percentage(top_ratings_real, testNeuCF_modelneucf_topk_recommendations),
-                           r_metrics.mean_reciprocal_rank(top_ratings_real, testNeuCF_modelneucf_topk_recommendations),
-                           r_metrics.mean_average_precision(top_ratings_real,testNeuCF_modelneucf_topk_recommendations)]
 
 
 ################## Rekomendacja hybrydowa NeuCF Doc2Vec + NeuCF ##################
@@ -1027,29 +984,4 @@ evaluation_df.loc["Hybrid model"] = [r_metrics.mean_true_positives_percentage(to
                            r_metrics.mean_reciprocal_rank(top_ratings_real, hybrid_topk_recommendations),
                            r_metrics.mean_average_precision(top_ratings_real,hybrid_topk_recommendations)]
 
-
-
-
-
-
-# # Model losowy OCENA
-# print("Model losowy  OCENA")
-# print("MTP: ", r_metrics.mean_true_positives_percentage(top_ratings_real, random_topk_recommendations))
-# print("MRR: ", r_metrics.mean_reciprocal_rank(top_ratings_real, random_topk_recommendations))
-# print("MAP: ", r_metrics.mean_average_precision(top_ratings_real,random_topk_recommendations))
-
-# # Model popularnościowy OCENA
-# print("Model popularnościowy  OCENA")
-# print("MTP: ", r_metrics.mean_true_positives_percentage(top_ratings_real, popularity_topk_recommendations))
-# print("MRR: ", r_metrics.mean_reciprocal_rank(top_ratings_real, popularity_topk_recommendations))
-# print("MAP: ", r_metrics.mean_average_precision(top_ratings_real,popularity_topk_recommendations))
-
-# # Model Doc2Vec OCENA
-# print("model Doc2Vec  OCENA")
-# print("MTP: ", r_metrics.mean_true_positives_percentage(top_ratings_real, doc2vec_topk_recommendations))
-# print("MRR: ", r_metrics.mean_reciprocal_rank(top_ratings_real, doc2vec_topk_recommendations))
-# print("MAP: ", r_metrics.mean_average_precision(top_ratings_real,doc2vec_topk_recommendations))
-
-
-##
 
