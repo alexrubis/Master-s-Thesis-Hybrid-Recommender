@@ -131,29 +131,6 @@ genres_type_counts = pd.Series([item for sublist in movies_df['genres_list'] for
 
 movies_df = movies_df.reset_index(drop = True)
 
-# # Pokaż filmy bez gatunków
-# movies_df[movies_df["genres_list"].apply(lambda x: "(no genres listed)" in x)]
-# # Pusta tablica gatunków dla filmów bez gatunków
-# movies_df["genres_list"] = movies_df["genres_list"].apply(lambda x: [] if "(no genres listed)" in x else x)
-
-# #Zmiana numeracji ID filmów i użytkowników w tags_df
-# tags_df["user_id"] = tags_df["user_id"].apply(lambda x: x-1)
-# tags_df["old_movie_id"] = tags_df["movie_id"]
-# # POWOLNE ROZWIĄZANIE
-# tags_df["movie_id"] = tags_df["movie_id"].apply(lambda x: movies_df["movie_id"][movies_df["old_movie_id"] == x].values[0])
-
-# # Dodanie kolumny z listą tagów dla każdego filmu
-# tags_by_movie = tags_df.groupby("movie_id")["tag"].apply(list)
-# movies_df["tags_list"] = movies_df["movie_id"].map(tags_by_movie)
-# movies_df.loc[movies_df['tags_list'].isnull(),['tags_list']] = movies_df.loc[movies_df['tags_list'].isnull(),'tags_list'].apply(lambda x: [])
-
-# # Złączenie list tagów i gatunków
-# movies_df["content_list"] = movies_df.apply(lambda row: row['genres_list'] + row['tags_list'], axis=1)
-
-# # Wyczyszczenie movies_df z niepotrzebnych kolumn
-# movies_df = movies_df.drop(["tags_list","genres_list","old_movie_id","genres"], axis=1)
-
-
 # Sortowanie tagów w genome_scores według wartości trafności (relevance) dla każdego filmu
 genome_scores_sorted = genome_scores.sort_values(by=['movie_id', 'relevance'], ascending=[True, False])
 
