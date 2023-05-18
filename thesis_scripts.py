@@ -7,6 +7,9 @@ Created on Mon Apr 10 07:14:05 2023
 ##############################################################################################
 # Import bibliotek
 ##############################################################################################
+import os
+from zipfile import ZipFile
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -25,7 +28,7 @@ import umap
 
 from tensorflow.keras.models import Model, Sequential
 from tensorflow.keras.layers import Embedding, Flatten, Input,  Dot,Dropout, Dense, BatchNormalization, Concatenate
-from tensorflow.keras.utils import model_to_dot
+from tensorflow.keras.utils import model_to_dot, get_file
 from tensorflow.keras.optimizers import Adam
 from tensorflow import keras
 from tensorflow.keras.constraints import NonNeg
@@ -37,6 +40,31 @@ import recmetrics
 ##############################################################################################
 ### Wczytanie i edycja zbioru movielens
 ##############################################################################################
+
+# # Pobieranie zbioru danych ze strony grouplens.org 
+# Odkomentować jeśli zbiory mają zostać pobrane!
+# ml_latest_small_url = ("http://files.grouplens.org/datasets/movielens/ml-latest-small.zip")
+
+# ml_25m_url = ("https://files.grouplens.org/datasets/movielens/ml-25m.zip")
+
+# cwd = os.getcwd()
+
+# ml_latest_small_url_zipped = get_file(cwd+"\\"+"ml-latest-small.zip", ml_latest_small_url)
+# ml_25m_url_zipped = get_file(cwd+"\\"+"ml-25m.zip", ml_25m_url)
+
+# # Wypakowywanie ml_latest_small_url
+# with ZipFile(ml_latest_small_url_zipped, "r") as zip:
+#         # Wypakowywanie pliku
+#         print("Wypakowywanie pliku...")
+#         zip.extractall(path=cwd)
+#         print("Done!")
+# # Wypakowywanie ml_25m_url
+# with ZipFile(ml_25m_url_zipped, "r") as zip:
+#         # Wypakowywanie pliku
+#         print("Wypakowywanie pliku...")
+#         zip.extractall(path=cwd)
+#         print("Done!")
+
 
 ratings_df = pd.read_csv('./ml-latest-small/ratings.csv', header=0, names=['user_id', 'movie_id', 'rating', 'timestamp'])
 movies_df = pd.read_csv('./ml-latest-small/movies.csv', header=0, names=['movie_id', 'title', 'genres'])
