@@ -100,6 +100,27 @@ def mean_average_precision(y,y_hat):
     
     return MAP
 
+def mean_average_recall(true_positives, top_k_predictions):
+    num_users = len(true_positives)
+    sum_recall_at_k = 0.0
+    
+    for i in range(num_users):
+        tp = set(true_positives[i])
+        pred = set(top_k_predictions[i])
+        
+        # Obliczanie elementóW wspólnych między prawdziwymi pozytywami i topK predykcjami.
+        intersection = tp.intersection(pred)
+        
+        # Obliczanie  czułości przy K
+        recall_at_k = len(intersection) / len(tp)
+        
+        # Dodawanie czułości przy K do sumy
+        sum_recall_at_k += recall_at_k
+    
+    # Obliczanie średniej czułości przy K
+    MAR = sum_recall_at_k / num_users
+    
+    return MAR
 
 def ndcg(ratings_list):
     '''
@@ -165,89 +186,3 @@ def mean_true_positives_percentage(y,y_hat):
     return mean_true_positives_percentage
 
 
-def evaluate_model(list_of_topk_lists_true, list_of_topk_lists_pred):
-    '''
-    Funkcja obliczająca wszystkie zastosowane metryki dla danego modelu.
-    
-    Parameters
-    ----------
-    args : argumenty
-
-    Returns
-    -------
-    evaluation_df : dataframe z wynikami wszystkich miar
-
-    '''
-    
-    return 0
-
-
-def evaluate_models(list_of_topk_lists_true, list_of_topk_lists_pred):
-    '''
-    Funkcja obliczająca wszystkie zastosowane metryki dla wszystkich modeli.
-    
-    Parameters
-    ----------
-    args : argumenty
-
-    Returns
-    -------
-    evaluation_df : dataframe z wynikami wszystkich miar
-
-    '''
-    
-    return 0
-
-
-########## Testy metryk
-# ratings_list1 = np.array([2,3,3,1,2])
-# ratings_list2 = np.array([3,3,2,2,1])
-
-
-# print("NDCG@1:", ndcg(ratings_list1))
-# print("NDCG@52:", ndcg(ratings_list2))
-
-
-#Wolniejesze #a = sum([rating/np.log2(index+2) for index, rating in enumerate(ratings_list1)])
-
-#start = time.time()
-#for i in range(100000):
-#    c = np.sum(ratings_list1 / np.log2(np.arange(2, len(ratings_list1)+2)))
-#end2 = time.time() - start
-
-# print("mrr: ", mean_reciprocal_rank(xxxx1, xxxx2))
-# print("acc: ", accuracy_score(xxxx1, xxxx2))
-# print("preci: ", precision_score(xxxx1, xxxx2, average=None))
-# print("rec: ", recall_score(xxxx1, xxxx2, average="micro"))
-
-# from sklearn.metrics import precision_score,recall_score,accuracy_score
-
-
-# print("MAP:", mean_average_precision([[1,2,3,4], [10,11,12,13], [4,5,6,7]], [[1,2,3,4], [0,10,55,4], [0,0,0,0]]))    
-
-# print(average_precision([1,2,3,4],[1,2,3,4]))
-# print(average_precision([10,11,12,13],[0,10,55,4]))
-# print(average_precision([4,5,6,7],[0,0,0,0]))
-    
-# A = [8305, 8681, 8550, 8063, 8466] # IDs of movies user liked
-# B = [8509, 8305, 8063, 8550, 8681] # IDs of movies recommended by recommender
-
-
-# correct = set(A) & set(B) # set of movies that the user liked and were recommended
-# total_predicted = len(B) # total number of movies recommended by the recommender
-# precision = len(correct) / total_predicted # precision of the recommendation
-
-# print("acc: ", accuracy_score(A,B))
-
-# print("Precision:", precision)
-# print("Precision2:", precision_score(A,B, average='micro'))
-
-
-# rank_lists =          [[1, 2, 3, 4, 5],   [3, 2, 1, 5, 4], [5, 4, 3, 2, 1]]
-# relevant_items_list = [[1, 2, 55,66,77] , [1, 2, 3, 4, 5], [2, 11,12,13,14]]
-# rank_lists = [[4, 5, 3], [1, 2, 3]]
-# relevant_items_list = [[1, 2, 3], [4, 5, 6]]
-
-
-# mrr = mean_reciprocal_rank(relevant_items_list, rank_lists)
-# print("MRR:", mrr)
