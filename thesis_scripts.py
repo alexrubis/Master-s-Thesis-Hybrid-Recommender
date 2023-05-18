@@ -279,7 +279,6 @@ plt.show()
 # Utworzenie macierzy rzadkiej ocen użytkowników i filmów
 ratings_sparse_matrix = ratings_df.pivot_table(index='user_id', columns='movie_id', values='rating', fill_value=np.nan)
 
-
 # Wykres macierzy rzadkiej
 fig, ax = plt.subplots(figsize=(20,5))
 sns.heatmap(ratings_sparse_matrix.isnull(), vmin=0, vmax=1, cbar=False, ax=ax).set_title("Macierz rzadka ocen użytkowników i filmów")
@@ -367,7 +366,7 @@ svd_unique_movies =  svd_test_df.movie_id.unique()
 def pred_user_svd(user_id, k):
     """
     Tworzy listę top K rekomendacji dla danego user_id według modelu SVD.
-
+    
     Parameters
     ----------
     user_id : int
@@ -378,19 +377,19 @@ def pred_user_svd(user_id, k):
     -------
     top_movies : list
         list top K rekomendacji.
-
+    
     """
 
-  predictions = []
-  for item in svd_unique_movies:
-      prediction = svd_algo.predict(user_id, item)
-      predictions.append(prediction)
-
-  predictions.sort(key=lambda x: x.est, reverse=True)
-
-  top_movies = [pred.iid for pred in predictions[:20]]
-
-  return top_movies
+    predictions = []
+    for item in svd_unique_movies:
+        prediction = svd_algo.predict(user_id, item)
+        predictions.append(prediction)
+      
+    predictions.sort(key=lambda x: x.est, reverse=True)
+      
+    top_movies = [pred.iid for pred in predictions[:k]]
+      
+    return top_movies
 
 
 ## Model Content Based - Doc2Vec
@@ -398,52 +397,52 @@ def pred_user_svd(user_id, k):
 doc2vec_vector_size = 20
 
 #  Odkomentować w celu uczenia nowego modelu Doc2Vec !!!! ######
-# # Najczęstsze i zbędne wyrazy w języku angielskim
-# stop_words = stopwords.words('english')
+# Najczęstsze i zbędne wyrazy w języku angielskim
+stop_words = stopwords.words('english')
 
-# def create_tokens(string_of_tags):
-#     """
-#     Funkcja czyszcząca listę tagów i tworząca z nich listę tokenów.
+def create_tokens(string_of_tags):
+    """
+    Funkcja czyszcząca listę tagów i tworząca z nich listę tokenów.
 
-#     Parameters
-#     ----------
-#     string_of_tags : TYPE string
-#         String z wszystkimi tagami odzielonymi przecinkami.
+    Parameters
+    ----------
+    string_of_tags : TYPE string
+        String z wszystkimi tagami odzielonymi przecinkami.
 
-#     Returns
-#     -------
-#     tokens : TYPE list
-#         Lista tokenów.
+    Returns
+    -------
+    tokens : TYPE list
+        Lista tokenów.
 
-#     """
-#     # Zamiana na małe litery
-#     string_of_tags.lower()
-#     # Podzielenie stringa na pojedyńcze wyrazy
-#     tokens = word_tokenize(string_of_tags)    
-#     # Usunięcie z listy tokenów wyrazów będacych jednym ze stop words oraz nie będących literowymi
-#     tokens = [token for token in tokens if not token in stop_words and token.isalpha()]
+    """
+    # Zamiana na małe litery
+    string_of_tags.lower()
+    # Podzielenie stringa na pojedyńcze wyrazy
+    tokens = word_tokenize(string_of_tags)    
+    # Usunięcie z listy tokenów wyrazów będacych jednym ze stop words oraz nie będących literowymi
+    tokens = [token for token in tokens if not token in stop_words and token.isalpha()]
       
-#     return tokens
+    return tokens
 
-# tags_tokens = [create_tokens(tags) for tags in movies_df["tags"]]
+tags_tokens = [create_tokens(tags) for tags in movies_df["tags"]]
 
-# # Lista obiektów TaggedDocument zawierających tokeny dla każdego z filmów
-# tagged_docs = [TaggedDocument(words=item, tags=[str(index)]) for index,item in enumerate(tags_tokens)]
+# Lista obiektów TaggedDocument zawierających tokeny dla każdego z filmów
+tagged_docs = [TaggedDocument(words=item, tags=[str(index)]) for index,item in enumerate(tags_tokens)]
 
 
-# # Tworzenie modelu Doc2Vec.
-# # dm=0 -> wykorzystanie algorytmu distributed bag of words (PV-DBOW) 
-# doc2vec_model = Doc2Vec(vector_size=doc2vec_vector_size, alpha=0.025, min_alpha=0.00025, min_count=1, dm=0, workers=4)
-# doc2vec_model.build_vocab(tagged_docs)
+# Tworzenie modelu Doc2Vec.
+# dm=0 -> wykorzystanie algorytmu distributed bag of words (PV-DBOW) 
+doc2vec_model = Doc2Vec(vector_size=doc2vec_vector_size, alpha=0.025, min_alpha=0.00025, min_count=1, dm=0, workers=4)
+doc2vec_model.build_vocab(tagged_docs)
 
-# # Uczenie modelu Doc2Vec
-# epoch_num = 50
-# print('Epoka: ')
-# for epoch in range(epoch_num):
-#   print(epoch)
-#   doc2vec_model.train(tagged_docs, total_examples=doc2vec_model.corpus_count, epochs=doc2vec_model.epochs)
-#   doc2vec_model.alpha -= 0.0002
-#   doc2vec_model.min_alpha = doc2vec_model.alpha
+# Uczenie modelu Doc2Vec
+epoch_num = 50
+print('Epoka: ')
+for epoch in range(epoch_num):
+  print(epoch)
+  doc2vec_model.train(tagged_docs, total_examples=doc2vec_model.corpus_count, epochs=doc2vec_model.epochs)
+  doc2vec_model.alpha -= 0.0002
+  doc2vec_model.min_alpha = doc2vec_model.alpha
 
 # Zapisywanie modelu do pliku
 #doc2vec_model.save('./models/doc2vecModel')
@@ -467,7 +466,7 @@ sims_df['tags_list'] = sims_df['movie_id'].map(movies_df.set_index('movie_id')['
 print("Top 20 filmów podobnych do filmu movie_id =", example_movie, "(",movies_df["title"][movies_df["movie_id"] == example_movie ].values[0], ")")
 print(sims_df)
 
-# Opisanie filmu za pomocą chmury słów
+# Opisanie filmu za pomocą chmury słów (WordCloud) z tagów filmów podobnych
 wordcloud_text = ' '.join([','.join(t) for t in sims_df.tags_list])
 plt.rcParams["figure.figsize"] = (15,10)
 # Wygenerowanie WordCloud
@@ -488,7 +487,7 @@ sims_df['tags_list'] = sims_df['movie_id'].map(movies_df.set_index('movie_id')['
 print("Top 20 filmów podobnych do filmu movie_id =", example_movie, "(",movies_df["title"][movies_df["movie_id"] == example_movie ].values[0], ")")
 print(sims_df)
 
-# Opisanie filmu za pomocą chmury słów
+# Opisanie filmu za pomocą chmury słów (WordCloud) z tagów filmów podobnych
 wordcloud_text = ' '.join([','.join(t) for t in sims_df.tags_list])
 plt.rcParams["figure.figsize"] = (15,10)
 # Wygenerowanie WordCloud
@@ -675,13 +674,11 @@ plt.xlabel('epoch')
 plt.legend(['train', 'test'], loc='upper left')
 plt.show()
 
-#y_true = test.rating
-
 # Predykcje ocen dla wszystkich par użytkownik film w zbiorze testowym
-#test["y_hat_model_neucf"] = np.round(NeuCF_model.predict([test.user_id, test.movie_id]), decimals=4)
+y_hat = np.round(NeuCF_model.predict([test.user_id, test.movie_id]), decimals=4)
+y_true = test.rating
 
-#print("MAE modelu NeuCF w zbiorze testowym: ", mean_absolute_error(y_true, test["y_hat_model_neucf"]))
-
+print("MAE modelu NeuCF_model w zbiorze testowym: ", mean_absolute_error(y_true, y_hat))
 
 def recommend_items_neucf(user_id, k):
     """
@@ -713,7 +710,7 @@ def recommend_items_neucf(user_id, k):
 
 # Model hybrydowy - połączenie NeuCF i Doc2Vec
 
-#doc2vec_movies_embbedings
+#Wektory doc2vec opisujące wszystkich użytkowników
 doc2vec_users_embbedings = np.array([get_doc2vec_user_vector(user_id) for user_id in ratings_df.user_id.unique()])
 
 # Liczba użytkowników i filmów
@@ -805,14 +802,11 @@ plt.xlabel('epoch')
 plt.legend(['train', 'test'], loc='upper left')
 plt.show()
 
-#y_hat = np.round(NeuCF_model.predict([test.user_id, test.movie_id]), decimals=4)
-#y_true = test.rating
-
 # Predykcje ocen dla wszystkich par użytkownik film w zbiorze testowym
-#test["y_hat_model_hybrid"] = np.round(Hybrid_model.predict([test.user_id, test.movie_id]), decimals=4)
+y_hat = np.round(Hybrid_model.predict([test.user_id, test.movie_id]), decimals=4)
+y_true = test.rating
 
-
-print("MAE modelu Hybrid_model w zbiorze testowym: ", mean_absolute_error(y_true, test["y_hat_model_hybrid"]))
+print("MAE modelu Hybrid_model w zbiorze testowym: ", mean_absolute_error(y_true, y_hat))
 
 
 def recommend_items_hybrid(user_id, k):
@@ -950,7 +944,7 @@ check_user_recs(150,popularity_topk_recommendations)
 evaluate_model("Popularity", top_ratings_real, popularity_topk_recommendations, k)
 
 ################## Rekomendacja SVD ##################
-svd_topk_recommendations = [np.array(pred_user_svd(user_id)) for user_id in svd_unique_users]
+svd_topk_recommendations = [np.array(pred_user_svd(user_id, k)) for user_id in svd_unique_users]
 
 # Lista z listami najlepszych filmów dla każdego użytkownika (wg. ocen) dla SVD
 svd_top_ratings_real = svd_test_df.groupby('user_id').apply(
